@@ -52,7 +52,7 @@ class TypeTable {
     /*! \brief stored type key */
     String type_key_data;
     /*! \brief acenstor information */
-    std::vector<int32_t> type_acenstors_data;
+    std::vector<const TVMFFITypeInfo*> type_acenstors_data;
     /*! \brief type fields informaton */
     std::vector<TVMFFIFieldInfo> type_fields_data;
     /*! \brief type methods informaton */
@@ -85,7 +85,7 @@ class TypeTable {
           type_acenstors_data[i] = parent->type_acenstors[i];
         }
         // set last type information to be parent
-        type_acenstors_data[parent->type_depth] = parent->type_index;
+        type_acenstors_data[parent->type_depth] = parent;
       }
       // initialize type info: no change to type_key and type_acenstors fields
       // after this line
@@ -220,6 +220,14 @@ class TypeTable {
 
   void RegisterTypeExtraInfo(int32_t type_index, const TVMFFITypeExtraInfo* extra_info) {
     Entry* entry = GetTypeEntry(type_index);
+    if (entry->extra_info != nullptr) {
+      TVM_FFI_LOG_AND_THROW(RuntimeError)
+          << "Overriding " << ToStringView(entry->type_key) << ", possible causes:\n"
+          << "- two ObjectDef<T>() calls for the same T \n"
+          << "- when we forget to assign _type_key to ObjectRef<Y> that inherits from T\n"
+          << "- another type with the same key is already registered\n"
+          << "Cross check the reflection registration.";
+    }
     entry->extra_info_data = *extra_info;
     entry->extra_info_data.doc = this->CopyString(extra_info->doc);
     entry->extra_info = &(entry->extra_info_data);
@@ -234,7 +242,7 @@ class TypeTable {
     for (auto it = type_table_.rbegin(); it != type_table_.rend(); ++it) {
       const Entry* ptr = it->get();
       if (ptr != nullptr && ptr->type_depth != 0) {
-        int parent_index = ptr->type_acenstors[ptr->type_depth - 1];
+        int parent_index = ptr->type_acenstors[ptr->type_depth - 1]->type_index;
         num_children[parent_index] += num_children[ptr->type_index] + 1;
         if (expected_child_slots[ptr->type_index] + 1 < ptr->num_slots) {
           expected_child_slots[ptr->type_index] = ptr->num_slots - 1;
@@ -247,7 +255,7 @@ class TypeTable {
       if (ptr != nullptr && num_children[ptr->type_index] >= min_children_count) {
         std::cerr << '[' << ptr->type_index << "]\t" << ToStringView(ptr->type_key);
         if (ptr->type_depth != 0) {
-          int32_t parent_index = ptr->type_acenstors[ptr->type_depth - 1];
+          int32_t parent_index = ptr->type_acenstors[ptr->type_depth - 1]->type_index;
           std::cerr << "\tparent=" << ToStringView(type_table_[parent_index]->type_key);
         } else {
           std::cerr << "\tparent=root";
@@ -275,6 +283,11 @@ class TypeTable {
     this->GetOrAllocTypeIndex(Object::_type_key, Object::_type_index, Object::_type_depth,
                               Object::_type_child_slots, Object::_type_child_slots_can_overflow,
                               -1);
+    TVMFFITypeExtraInfo info;
+    info.total_size = sizeof(Object);
+    info.creator = nullptr;
+    info.doc = TVMFFIByteArray{nullptr, 0};
+    RegisterTypeExtraInfo(Object::_type_index, &info);
     // reserve the static types
     ReserveBuiltinTypeIndex(StaticTypeKey::kTVMFFINone, TypeIndex::kTVMFFINone);
     ReserveBuiltinTypeIndex(StaticTypeKey::kTVMFFIInt, TypeIndex::kTVMFFIInt);
@@ -315,6 +328,84 @@ class TypeTable {
   Map<String, int64_t> type_key2index_;
   std::vector<Any> any_pool_;
 };
+
+void MakeObjectFromPackedArgs(ffi::PackedArgs args, Any* ret) {
+  int32_t type_index;
+  if (auto opt_type_index = args[0].try_cast<int32_t>()) {
+    type_index = *opt_type_index;
+  } else {
+    String type_key = args[0].cast<String>();
+    TVMFFIByteArray type_key_array = TVMFFIByteArray{type_key.data(), type_key.size()};
+    TVM_FFI_CHECK_SAFE_CALL(TVMFFITypeKeyToIndex(&type_key_array, &type_index));
+  }
+
+  TVM_FFI_ICHECK(args.size() % 2 == 1);
+  const TVMFFITypeInfo* type_info = TVMFFIGetTypeInfo(type_index);
+
+  if (type_info->extra_info == nullptr || type_info->extra_info->creator == nullptr) {
+    TVM_FFI_THROW(RuntimeError) << "Type `" << TypeIndexToTypeKey(type_index)
+                                << "` does not support reflection creation";
+  }
+  TVMFFIObjectHandle handle;
+  TVM_FFI_CHECK_SAFE_CALL(type_info->extra_info->creator(&handle));
+  ObjectPtr<Object> ptr =
+      details::ObjectUnsafe::ObjectPtrFromOwned<Object>(static_cast<TVMFFIObject*>(handle));
+
+  std::vector<String> keys;
+  std::vector<bool> keys_found;
+
+  for (int i = 1; i < args.size(); i += 2) {
+    keys.push_back(args[i].cast<String>());
+  }
+  keys_found.resize(keys.size(), false);
+
+  auto search_field = [&](const TVMFFIByteArray& field_name) {
+    for (size_t i = 0; i < keys.size(); ++i) {
+      if (keys_found[i]) continue;
+      if (keys[i].compare(field_name) == 0) {
+        return i;
+      }
+    }
+    return keys.size();
+  };
+
+  auto update_fields = [&](const TVMFFITypeInfo* tinfo) {
+    for (int i = 0; i < tinfo->num_fields; ++i) {
+      const TVMFFIFieldInfo* field_info = tinfo->fields + i;
+      size_t arg_index = search_field(field_info->name);
+      void* field_addr = reinterpret_cast<char*>(ptr.get()) + field_info->offset;
+      if (arg_index < keys.size()) {
+        AnyView field_value = args[arg_index * 2 + 2];
+        field_info->setter(field_addr, reinterpret_cast<const TVMFFIAny*>(&field_value));
+        keys_found[arg_index] = true;
+      } else if (field_info->flags & kTVMFFIFieldFlagBitMaskHasDefault) {
+        field_info->setter(field_addr, &(field_info->default_value));
+      } else {
+        TVM_FFI_THROW(TypeError) << "Required field `"
+                                 << String(field_info->name.data, field_info->name.size)
+                                 << "` not set in type `" << TypeIndexToTypeKey(type_index) << "`";
+      }
+    }
+  };
+
+  // iterate through acenstors in parent to child order
+  // skip the first one since it is always the root object
+  for (int i = 1; i < type_info->type_depth; ++i) {
+    update_fields(type_info->type_acenstors[i]);
+  }
+  update_fields(type_info);
+
+  for (size_t i = 0; i < keys.size(); ++i) {
+    if (!keys_found[i]) {
+      TVM_FFI_THROW(TypeError) << "Type `" << TypeIndexToTypeKey(type_index)
+                               << "` does not have field `" << keys[i] << "`";
+    }
+  }
+  *ret = ObjectRef(ptr);
+}
+
+TVM_FFI_REGISTER_GLOBAL("ffi.MakeObjectFromPackedArgs").set_body_packed(MakeObjectFromPackedArgs);
+
 }  // namespace ffi
 }  // namespace tvm
 
