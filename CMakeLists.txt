@@ -448,15 +448,10 @@ endif(USE_KALLOC_ALIGNMENT)
 include(cmake/utils/CCache.cmake)
 
 include(CheckCXXCompilerFlag)
-if(NOT MSVC)
-  check_cxx_compiler_flag("-std=c++17" SUPPORT_CXX17)
-  set(CMAKE_CXX_FLAGS "-std=c++17 ${CMAKE_CXX_FLAGS}")
-  set(CMAKE_CUDA_STANDARD 17)
-else()
-  check_cxx_compiler_flag("/std:c++17" SUPPORT_CXX17)
-  set(CMAKE_CXX_FLAGS "/std:c++17 ${CMAKE_CXX_FLAGS}")
-  set(CMAKE_CUDA_STANDARD 17)
-endif()
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+set(CMAKE_CUDA_STANDARD 17)
 
 # Module rules
 include(cmake/modules/CUDA.cmake)
@@ -832,7 +827,7 @@ endif()
 
 
 if (USE_CUDA AND USE_NVSHMEM)
-  include_directories(SYSTEM ${USE_NVSHMEM}/include)
+  target_include_directories(tvm_runtime_objs PUBLIC ${NVSHMEM_INCLUDE_DIR})
   find_library(NVSHMEM_HOST nvshmem_host ${NVSHMEM_LIB_DIR})
   find_library(NVSHMEM_DEVICE nvshmem_device ${NVSHMEM_LIB_DIR})
   target_link_libraries(tvm PRIVATE ${NVSHMEM_HOST} ${NVSHMEM_DEVICE})

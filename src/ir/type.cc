@@ -25,6 +25,14 @@
 #include <tvm/ir/type.h>
 namespace tvm {
 
+TVM_FFI_STATIC_INIT_BLOCK({
+  PrimTypeNode::RegisterReflection();
+  PointerTypeNode::RegisterReflection();
+  TupleTypeNode::RegisterReflection();
+  FuncTypeNode::RegisterReflection();
+  TensorMapTypeNode::RegisterReflection();
+});
+
 PrimType::PrimType(runtime::DataType dtype, Span span) {
   ObjectPtr<PrimTypeNode> n = make_object<PrimTypeNode>();
   n->dtype = dtype;
@@ -81,5 +89,17 @@ TVM_REGISTER_NODE_TYPE(TupleTypeNode);
 TVM_FFI_REGISTER_GLOBAL("ir.TupleType").set_body_typed([](Array<Type> fields) {
   return TupleType(fields);
 });
+
+TVM_FFI_REGISTER_GLOBAL("ir.TensorMapType").set_body_typed([](Span span) {
+  return TensorMapType(span);
+});
+
+TensorMapType::TensorMapType(Span span) {
+  ObjectPtr<TensorMapTypeNode> n = make_object<TensorMapTypeNode>();
+  n->span = std::move(span);
+  data_ = std::move(n);
+}
+
+TVM_REGISTER_NODE_TYPE(TensorMapTypeNode);
 
 }  // namespace tvm

@@ -27,6 +27,7 @@
  * A follow-up pass named "FuseTIR" will generate a TIR PrimFunc for each grouped function.
  */
 
+#include <tvm/ffi/reflection/reflection.h>
 #include <tvm/relax/analysis.h>
 #include <tvm/relax/dataflow_matcher.h>
 #include <tvm/relax/dataflow_pattern.h>
@@ -46,6 +47,11 @@
 
 namespace tvm {
 namespace relax {
+
+TVM_FFI_STATIC_INIT_BLOCK({
+  transform::FusionPatternNode::RegisterReflection();
+  transform::PatternCheckContextNode::RegisterReflection();
+});
 
 /*
   Note on Fusing algorithm:
@@ -1294,7 +1300,7 @@ class CompositeFunctionAnnotator : public ExprMutator {
     if (!func_node->GetAttr<String>(attr::kComposite)) {
       // This lambda function doesn't have `attr::kComposite`, so it
       // was not produced by FuseOps.
-      return std::move(f_inner);
+      return f_inner;
     }
 
     f_inner = WithoutAttr(std::move(f_inner), tvm::relax::attr::kPrimitive);

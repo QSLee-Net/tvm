@@ -182,6 +182,8 @@ void CodeGenCUDA::PrintExtraAttrs(const PrimFunc& f, std::ostream& os) {
 }
 
 std::string CodeGenCUDA::Finish() {
+  decl_stream << "#include <cuda.h>\n";
+
   if (enable_fp16_) {
     decl_stream << "#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 530)\n";
     decl_stream << "#include <cuda_fp16.h>\n";
@@ -194,7 +196,6 @@ std::string CodeGenCUDA::Finish() {
     decl_stream << _cuda_half_t_def;
     decl_stream << "#endif\n\n";
 
-    decl_stream << "#include <cuda.h>\n";
     decl_stream << _cuda_half_util;
   }
 
@@ -297,19 +298,10 @@ std::string CodeGenCUDA::Finish() {
   decl_stream << "#define TVM_ENABLE_L2_PREFETCH 0\n";
   decl_stream << "#endif\n";
 
-  decl_stream << "\n#ifdef _WIN32\n";
-  decl_stream << "  using uint = unsigned int;\n";
-  decl_stream << "  using uchar = unsigned char;\n";
-  decl_stream << "  using ushort = unsigned short;\n";
-  decl_stream << "  using int64_t = long long;\n";
-  decl_stream << "  using uint64_t = unsigned long long;\n";
-  decl_stream << "#else\n";
-  decl_stream << "  #define uint unsigned int\n";
-  decl_stream << "  #define uchar unsigned char\n";
-  decl_stream << "  #define ushort unsigned short\n";
-  decl_stream << "  #define int64_t long long\n";
-  decl_stream << "  #define uint64_t unsigned long long\n";
-  decl_stream << "#endif\n";
+  decl_stream << "#include <cstdint>\n";
+  decl_stream << "using uint = unsigned int;\n";
+  decl_stream << "using uchar = unsigned char;\n";
+  decl_stream << "using ushort = unsigned short;\n";
 
   return CodeGenC::Finish();
 }

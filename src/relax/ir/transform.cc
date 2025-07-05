@@ -23,6 +23,7 @@
  */
 #include <dmlc/thread_local.h>
 #include <tvm/ffi/function.h>
+#include <tvm/ffi/reflection/reflection.h>
 #include <tvm/ffi/rvalue_ref.h>
 #include <tvm/node/repr_printer.h>
 #include <tvm/relax/analysis.h>
@@ -61,7 +62,10 @@ class FunctionPassNode : public tvm::transform::PassNode {
 
   FunctionPassNode() = default;
 
-  void VisitAttrs(tvm::AttrVisitor* v) { v->Visit("pass_info", &pass_info); }
+  static void RegisterReflection() {
+    namespace refl = tvm::ffi::reflection;
+    refl::ObjectDef<FunctionPassNode>().def_ro("pass_info", &FunctionPassNode::pass_info);
+  }
 
   /*!
    * \brief Run a function pass on given pass context.
@@ -205,7 +209,10 @@ class DataflowBlockPassNode : public tvm::transform::PassNode {
 
   DataflowBlockPassNode() = default;
 
-  void VisitAttrs(tvm::AttrVisitor* v) { v->Visit("pass_info", &pass_info); }
+  static void RegisterReflection() {
+    namespace refl = tvm::ffi::reflection;
+    refl::ObjectDef<DataflowBlockPassNode>().def_ro("pass_info", &DataflowBlockPassNode::pass_info);
+  }
 
   IRModule operator()(IRModule mod, const PassContext& pass_ctx) const final;
 
@@ -272,7 +279,7 @@ class DataflowBlockMutator : public ExprMutator {
     ICHECK(global_scope_vars.empty() && symbolic_vars.empty())
         << "Error: DataflowBlock Pass should not delete any GlobalScope/Symbolic Var.";
 
-    return std::move(updated_block);
+    return updated_block;
   }
 
  private:
@@ -401,6 +408,12 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
       p->stream << "Run DataflowBlock pass: " << info->name << " at the optimization level "
                 << info->opt_level;
     });
+
+TVM_FFI_STATIC_INIT_BLOCK({
+  FunctionPassNode::RegisterReflection();
+  DataflowBlockPassNode::RegisterReflection();
+});
+
 }  // namespace transform
 }  // namespace relax
 }  // namespace tvm

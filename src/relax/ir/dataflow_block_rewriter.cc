@@ -23,6 +23,7 @@
  */
 
 #include <tvm/arith/analyzer.h>
+#include <tvm/ffi/reflection/reflection.h>
 #include <tvm/node/structural_equal.h>
 #include <tvm/relax/analysis.h>
 #include <tvm/relax/dataflow_matcher.h>
@@ -374,10 +375,11 @@ class PatternContextRewriterNode : public PatternMatchingRewriterNode {
 
   RewriteSpec RewriteBindings(const Array<Binding>& bindings) const override;
 
-  void VisitAttrs(AttrVisitor* visitor) {
-    visitor->Visit("pattern", &pattern);
-    ffi::Function untyped_func = rewriter_func;
-    visitor->Visit("rewriter_func", &untyped_func);
+  static void RegisterReflection() {
+    namespace refl = tvm::ffi::reflection;
+    refl::ObjectDef<PatternContextRewriterNode>()
+        .def_ro("pattern", &PatternContextRewriterNode::pattern)
+        .def_ro("rewriter_func", &PatternContextRewriterNode::rewriter_func);
   }
 
   static constexpr const char* _type_key = "relax.dpl.PatternContextRewriter";
@@ -448,6 +450,8 @@ Function RewriteBindings(
 }
 
 TVM_FFI_REGISTER_GLOBAL("relax.dpl.rewrite_bindings").set_body_typed(RewriteBindings);
+
+TVM_FFI_STATIC_INIT_BLOCK({ PatternContextRewriterNode::RegisterReflection(); });
 
 }  // namespace relax
 }  // namespace tvm

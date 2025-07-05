@@ -27,6 +27,14 @@
 namespace tvm {
 namespace relax {
 
+TVM_FFI_STATIC_INIT_BLOCK({
+  CallTIRWithGradAttrs::RegisterReflection();
+  CallTIRInplaceAttrs::RegisterReflection();
+  CallInplacePackedAttrs::RegisterReflection();
+  ToVDeviceAttrs::RegisterReflection();
+  HintOnDeviceAttrs::RegisterReflection();
+});
+
 bool EqualConstInt(const PrimExpr& lhs, int64_t value) {
   if (const int64_t* pvalue = tir::as_const_int(lhs)) {
     return pvalue[0] == value;
@@ -520,7 +528,7 @@ Expr NormalizeCallTIR(const BlockBuilder& ctx, Call call) {
     call.CopyOnWrite()->args = new_args;
   }
 
-  return std::move(call);
+  return call;
 }
 
 void ValidateCallTIR(Call call) {
@@ -742,7 +750,7 @@ Expr NormalizeCallTIRInPlace(const BlockBuilder& ctx, Call call) {
     }
   }
 
-  return std::move(call);
+  return call;
 }
 
 TVM_REGISTER_NODE_TYPE(CallTIRInplaceAttrs);

@@ -311,7 +311,7 @@ IRModule Pass::operator()(IRModule mod, const PassContext& pass_ctx) const {
     ret = node->operator()(std::move(mod), pass_ctx);
   }
   pass_ctx.InstrumentAfterPass(ret, pass_info);
-  return std::move(ret);
+  return ret;
 }
 
 IRModule Pass::AssertImmutableModule(const IRModule& mod, const PassNode* node,
@@ -325,7 +325,7 @@ IRModule Pass::AssertImmutableModule(const IRModule& mod, const PassNode* node,
     // must be very low.
     LOG_FATAL << "Immutable module has been modified in pass: " << node->Info()->name;
   }
-  return std::move(ret);
+  return ret;
 }
 
 /*!
@@ -348,7 +348,10 @@ class ModulePassNode : public PassNode {
 
   ModulePassNode() = default;
 
-  void VisitAttrs(tvm::AttrVisitor* v) { v->Visit("pass_info", &pass_info); }
+  static void RegisterReflection() {
+    namespace refl = tvm::ffi::reflection;
+    refl::ObjectDef<ModulePassNode>().def_ro("pass_info", &ModulePassNode::pass_info);
+  }
 
   /*!
    * \brief Run a module pass on given pass context.
@@ -524,6 +527,13 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
         p->stream << "]\n";
       }
     });
+
+TVM_FFI_STATIC_INIT_BLOCK({
+  PassContextNode::RegisterReflection();
+  PassInfoNode::RegisterReflection();
+  SequentialNode::RegisterReflection();
+  ModulePassNode::RegisterReflection();
+});
 
 TVM_REGISTER_NODE_TYPE(ModulePassNode);
 

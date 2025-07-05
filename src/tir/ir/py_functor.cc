@@ -23,6 +23,7 @@
  *        StmtExprVisitor/StmtExprMutator.
  */
 
+#include <tvm/ffi/reflection/reflection.h>
 #include <tvm/tir/expr_functor.h>
 #include <tvm/tir/stmt_functor.h>
 
@@ -213,7 +214,10 @@ class PyStmtExprVisitorNode : public Object, public StmtExprVisitor {
     vtable(stmt, this);
   }
 
-  void VisitAttrs(AttrVisitor* v) {}
+  static void RegisterReflection() {
+    // No fields to register as they are not visited
+  }
+
   static constexpr const char* _type_key = "tir.PyStmtExprVisitor";
   TVM_DECLARE_BASE_OBJECT_INFO(PyStmtExprVisitorNode, Object);
 
@@ -572,7 +576,11 @@ class PyStmtExprMutatorNode : public Object, public StmtExprMutator {
     static FStmtType vtable = InitStmtVTable();
     vtable(stmt, this);
   }
-  void VisitAttrs(AttrVisitor* v) {}
+
+  static void RegisterReflection() {
+    // No fields to register as they are not visited
+  }
+
   static constexpr const char* _type_key = "tir.PyStmtExprMutator";
   TVM_DECLARE_BASE_OBJECT_INFO(PyStmtExprMutatorNode, Object);
 
@@ -628,7 +636,6 @@ class PyStmtExprMutatorNode : public Object, public StmtExprMutator {
   PY_EXPR_MUTATOR_DISPATCH(FloatImmNode, f_visit_float_imm);
   PY_EXPR_MUTATOR_DISPATCH(StringImmNode, f_visit_string_imm);
 
- private:
  private:
   static FExprType InitExprVTable() {
     FExprType vtable;
@@ -812,6 +819,11 @@ class PyStmtExprMutator : public ObjectRef {
 // ================================================
 // TVM Register
 // ================================================
+
+TVM_FFI_STATIC_INIT_BLOCK({
+  PyStmtExprVisitorNode::RegisterReflection();
+  PyStmtExprMutatorNode::RegisterReflection();
+});
 
 TVM_REGISTER_NODE_TYPE(PyStmtExprVisitorNode);
 TVM_REGISTER_NODE_TYPE(PyStmtExprMutatorNode);

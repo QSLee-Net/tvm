@@ -43,6 +43,8 @@ using tir::is_zero;
 using tir::make_const;
 using tir::make_zero;
 
+TVM_FFI_STATIC_INIT_BLOCK({ IntervalSetNode::RegisterReflection(); });
+
 PrimExpr SymbolicLimits::pos_inf_ = Var("pos_inf", DataType::Handle());
 PrimExpr SymbolicLimits::neg_inf_ = Var("neg_inf", DataType::Handle());
 
@@ -999,7 +1001,7 @@ IntSet EvalSet(Range r, const Map<Var, IntSet>& dom_map) {
   // Simplifying first can give tighter bounds if r->min and r->extent share variables
   PrimExpr sum = r->min + r->extent - 1;
   auto res = m.Eval(IntervalSet(r->min, ana.Simplify(sum)));
-  return std::move(res);
+  return res;
 }
 
 IntSet EvalSet(Range r, const std::unordered_map<const VarNode*, IntSet>& dom_map) {

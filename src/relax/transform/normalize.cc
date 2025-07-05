@@ -20,7 +20,7 @@
 /*!
  * \file tvm/relax/transform/normalize.cc
  * \brief Pass for transforming Relax IR to normal form, i.e., the expressions are normalized(no
- * nesting and hence the AST is in ANF), and all checked_type_ and shape_ of expressions are
+ * nesting and hence the AST is in ANF), and all struct_info_ of expressions are
  * available.
  */
 
@@ -188,7 +188,7 @@ class GlobalVarNormalizer : private ExprMutator {
 
   IRModule RenameModule() {
     if (!NeedRename()) {
-      return module_;
+      return std::move(module_);
     }
 
     // Step 1. Add public functions (functions with global_symbol attributes)
@@ -212,7 +212,7 @@ class GlobalVarNormalizer : private ExprMutator {
     auto module_node = module_.CopyOnWrite();
     module_node->functions = after_module->functions;
     module_node->global_var_map_ = after_module->global_var_map_;
-    return module_;
+    return std::move(module_);
   }
 
   /*! \brief Check if any function needs to be renamed. */
